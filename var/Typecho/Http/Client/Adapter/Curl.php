@@ -32,6 +32,39 @@ class Typecho_Http_Client_Adapter_Curl extends Typecho_Http_Client_Adapter
     }
 
     /**
+     * 判断请求的URL是否是内网IP
+     * @author JoyChou
+     * @param string $url 请求地址
+     * @return bool
+     */
+    public function isInnerIP($url)
+    {
+        // 限制为HTTP/HTTPS协议，防止其他协议攻击
+        $params = parse_url($url);
+        if ($params['scheme'] != 'http' && $params['scheme'] != 'https'){
+            return True;
+        }
+
+        $host = $params['host'];
+        $ip = gethostbyname($host);
+
+        // IP转换整数型
+        $longIP = ip2long($ip);
+
+        /*
+            内网IP：
+            10.0.0.1 - 10.255.255.254       (10.0.0.0/8)
+            192.168.0.1 - 192.168.255.254   (192.168.0.0/16)
+            127.0.0.1 - 127.255.255.254     (127.0.0.0/8)
+            172.16.0.1 - 172.31.255.254     (172.16.0.0/12)
+        */
+        return ip2long('127.0.0.0')>>24 == $longIP>>24 ||
+            ip2long('10.0.0.0')>>24 == $longIP>>24 ||
+            ip2long('172.16.0.0')>>20 == $longIP>>20 ||
+            ip2long('192.168.0.0')>>16 == $longIP>>16;
+    }
+
+    /**
      * 发送请求
      *
      * @access public
@@ -40,6 +73,9 @@ class Typecho_Http_Client_Adapter_Curl extends Typecho_Http_Client_Adapter
      */
     public function httpSend($url)
     {
+        if ($this->isInnerIP($url)) {
+            throw new Typecho_Http_Client_Exception('Scheme is not https/http or IP is inner ip', 500);
+        }
         $ch = curl_init();
 
         if ($this->ip) {
@@ -54,7 +90,7 @@ class Typecho_Http_Client_Adapter_Curl extends Typecho_Http_Client_Adapter
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_FRESH_CONNECT, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeout);
-
+        curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 
